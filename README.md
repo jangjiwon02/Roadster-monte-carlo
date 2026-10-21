@@ -4,11 +4,24 @@
 
 A MATLAB + Simulink project that simulates straight-line acceleration for a high-performance EV ("roadster"-style) and runs it hundreds of times under randomized operating conditions (tire grip, air density/drag, payload, motor derating, road grade) to produce a **performance distribution** — not a single 0-100 km/h number, but the spread you'd actually see run to run.
 
-## Status: unverified first draft
+## Status: built and run (MATLAB R2024b)
 
-⚠️ This was written in an environment with no licensed MATLAB/Simulink available, so none of it has actually been run yet. The physics and the Simulink wiring were worked through carefully, but **the first real run should be treated as a debugging session, not a guaranteed success**. The most likely failure point is `build_roadster_model.m` — a block path string or port count that doesn't match your MATLAB release. Simulink's error messages after a failed `add_block`/`add_line` call point directly at the line to fix.
+`build_roadster_model.m` built `RoadsterLongitudinal.slx` on the first run with no code changes, and a 20-trial check passed (all trials finite, 0-100 km/h inside the plausible range). The full **500-trial run** (`rng(2024)`, sequential, no NaN rows) gave:
 
-If you're doing this together with Claude over a Remote Control session (so it can see your actual MATLAB output and iterate), that's the fastest way to get from "first draft" to "working."
+| Metric | Mean | Std | 5th pct | 95th pct |
+|---|---|---|---|---|
+| 0-100 km/h (s) | 3.10 | 0.22 | 2.80 | 3.49 |
+| Quarter mile (s) | 10.67 | 0.20 | 10.36 | 11.03 |
+| Trap speed (km/h) | 221.5 | 3.4 | 216.1 | 226.9 |
+| Speed at 12 s (km/h) | 234.4 | 5.1 | 226.1 | 242.8 |
+
+Nominal parameters (`default_vehicle_params.m`, unchanged from the draft and not retuned): mass 1750 kg, mu 0.95, `k_aero` 0.343, `T_peak` 8250 N·m, `P_peak` 400 kW (wheel-equivalent). Dashboard: `monte_carlo_dashboard.png`.
+
+Known limitations from validation:
+- `T_peak` is non-binding: 8250/0.33 ≈ 25 kN exceeds the traction limit mu·m·g ≈ 16.3 kN, so launch is set by mu and its sampled spread has no effect.
+- Wheel power is taken at 400 kW with no drivetrain loss, inertia or thermal derating, and acceleration is full from t=0, so trap speed (~221 km/h) is optimistic.
+- `vMax_kmh` is the speed at the 12 s stop time, not a true top speed.
+- Results are from a simplified point-mass model, not a validated vehicle model.
 
 ## What this is (and isn't)
 
@@ -55,7 +68,7 @@ To change the vehicle (lighter/heavier, grippier tires, more/less power, tighter
 ## Tuning the model once it runs
 
 A few things worth checking/adjusting once you can actually run it:
-- The nominal numbers in `default_vehicle_params.m` were picked to land in a plausible "very fast EV" range by hand-calculation, not validated against a real run — expect to retune `T_peak`/`P_peak`/`mu` once you see actual simulated times.
+- The nominal numbers in `default_vehicle_params.m` were picked by hand-calculation and checked against a real 20- and 500-trial run (see Status); `T_peak` is non-binding and could be lowered to ~5000-6000 N·m if you want its spread to matter.
 - `p.sim.stopTime` (12 s) should comfortably cover 0-100 km/h and the quarter mile for the nominal parameters; if a lot of trials show `NaN` in the results table, the vehicle in that trial was too slow to finish within the simulated window — either that's a real (slow) outlier worth keeping, or the stop time needs extending.
 - `N = 500` trials is a reasonable default for smooth-looking histograms; drop it to ~50 while you're still debugging the model (much faster to iterate).
 
